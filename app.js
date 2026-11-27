@@ -3,14 +3,18 @@ const $=id=>document.getElementById(id), cols=GridMath.cols;
 const paths={book:'M3 4h6a4 4 0 0 1 3 2 4 4 0 0 1 3-2h6v15h-6a4 4 0 0 0-3 2 4 4 0 0 0-3-2H3z M12 6v15',search:'M20 20l-5-5 M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0',grid:'M3 4h18v16H3z M3 10h18 M9 4v16',keys:'M2 6h20v12H2z M6 10h1m3 0h1m3 0h1m3 0h1M8 14h8',target:'M21 12a9 9 0 1 1-9-9 M17 12a5 5 0 1 1-5-5 M12 12l8-8',export:'M12 3v11m-4-4 4 4 4-4 M4 15v5h16v-5',check:'M4 12l5 5L20 6',curve:'M3 19V5 M3 19h18 M5 16c5 0 5-11 9-11s3 6 7 6',layers:'M3 8l9-5 9 5-9 5z M3 12l9 5 9-5 M3 16l9 5 9-5',area:'M3 20V4m0 16h18 M5 17l4-8 4 4 6-9v13z',cross:'M3 12h18 M12 3v18 M5 18l13-13'};
 function icon(k){return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="'+paths[k]+'"/></svg>';}
 document.querySelectorAll('[data-icon]').forEach(el=>el.innerHTML=icon(el.dataset.icon));
-const groups=['Akar persamaan','Sistem linier','Sistem nonlinier','Interpolasi','Turunan numerik','Integral numerik'];
-const symbols=['cross','grid','layers','curve','curve','area'];
+const groups=['UTS','UAS'];
+const symbols=['book','layers'];
 const key='numerika.workbook.v1';let saved;
 try{saved=JSON.parse(localStorage.getItem(key))||{};}catch{saved={};}
 saved.works??={};saved.passed??={};
-let lesson=lessons.find(l=>l.id===saved.lesson)||lessons[0],mode=saved.mode==='exam'?'exam':'guide',openGroup=lesson.group;
+saved.sets??={};
+let original=lessons.find(l=>l.id===saved.lesson)||lessons[0],setIndex=saved.sets[original.id]||0;
+let lesson=practiceSet(original,setIndex),mode=saved.mode==='exam'?'exam':'guide',openGroup=termOf(lesson);
+let stage='intro',exampleStep=0,inspectRow=lesson.plot.from;
 let addr,changes,data,read,feedback={},tab='steps',clipboard=null,history=[],formOriginal='',plotPoints=[];
-function keyFor(){return lesson.id+'@'+mode;}
+function keyFor(){return lesson.id+'@'+mode+(setIndex?'@'+setIndex:'');}
+function passedLesson(id){return ['guide','exam'].some(m=>['','@1','@2'].some(s=>saved.passed[id+'@'+m+s]));}
 const reduceMotion=matchMedia('(prefers-reduced-motion: reduce)');
 function reveal(element,delay=0){
   element.getAnimations().filter(a=>a.id==='content-change').forEach(a=>a.cancel());
@@ -30,12 +34,13 @@ function persist(){try{localStorage.setItem(key,JSON.stringify(saved));$('save')
 function init(){
   changes=saved.works[keyFor()]??={};data={...lesson.base,...changes};read=GridMath.sheet(data);history=[];feedback={};addr=Object.keys(lesson.answers)[0];tab='steps';
   saved.lesson=lesson.id;saved.mode=mode;persist();
-  $('title').textContent=lesson.title;$('week').textContent='Week '+lesson.week;$('crumb').textContent=lesson.group;$('source').textContent=lesson.source;$('task').textContent=lesson.task;document.title=lesson.title+' · Numerika';
+  $('title').textContent=lesson.title;$('week').textContent='Week '+lesson.week;$('crumb').textContent=termOf(lesson)+' / '+lesson.group;$('source').textContent=lesson.source;$('setChoice').value=setIndex;document.title=lesson.title+' · Numerika';
   for(const m of ['guide','exam']){$(m).classList.toggle('active',mode===m);$(m).setAttribute('aria-pressed',String(mode===m));}$('concept').disabled=mode==='exam';
-  drawer(false);updateNav();render();status();
+  drawer(false);updateNav();updateStudy();render();status();
 }
 function selectLesson(l){
-  commit();lesson=l;openGroup=l.group;init();$('dialog').close();
+  commit();original=l;setIndex=saved.sets[l.id]||0;lesson=practiceSet(l,setIndex);openGroup=termOf(l);
+  stage='intro';exampleStep=0;inspectRow=lesson.plot.from;init();$('dialog').close();
   window.scrollTo(0,0);document.querySelector('.gridScroll').scrollTo(0,0);
   reveal(document.querySelector('.heading'));reveal(document.querySelector('.overview'),35);
 }
@@ -43,12 +48,14 @@ function updateNav(){
   const nav=$('nav');
   if(!nav.childElementCount)groups.forEach((g,i)=>{
     const b=document.createElement('button');b.className='group';b.dataset.group=g;
-    b.innerHTML=icon(symbols[i])+'<span>'+g+'</span><span class="arr" aria-hidden="true">›</span>';
+    b.innerHTML=icon(symbols[i])+'<span>'+g+' · Week '+(i?'8–14':'1–7')+'</span><span class="arr" aria-hidden="true">›</span>';
     b.onclick=()=>{openGroup=openGroup===g?'':g;updateNav();};
     const panel=document.createElement('div');panel.className='navPanel';panel.id='module-'+i;b.setAttribute('aria-controls',panel.id);
     const clip=document.createElement('div');clip.className='navClip';
     const sub=document.createElement('div');sub.className='subnav';
-    lessons.filter(l=>l.group===g).forEach(l=>{
+    let lastWeek=null;
+    lessons.filter(l=>termOf(l)===g).forEach(l=>{
+      if(lastWeek!==l.week){sub.append(studyElement('div','Week '+l.week+(l.week===5?' · Pengayaan':''),'weekLabel'));lastWeek=l.week;}
       const item=document.createElement('button');item.className='lesson';item.dataset.lesson=l.id;item.dataset.title=l.title;
       item.onclick=()=>selectLesson(l);sub.append(item);
     });
@@ -56,14 +63,14 @@ function updateNav(){
   });
   nav.querySelectorAll('.group').forEach(b=>{
     const expanded=b.dataset.group===openGroup,panel=b.nextElementSibling;
-    b.classList.toggle('current',b.dataset.group===lesson.group);b.setAttribute('aria-expanded',String(expanded));
+    b.classList.toggle('current',b.dataset.group===termOf(lesson));b.setAttribute('aria-expanded',String(expanded));
     panel.classList.toggle('expanded',expanded);panel.inert=!expanded;
   });
   nav.querySelectorAll('.lesson').forEach(item=>{
     const id=item.dataset.lesson;item.classList.toggle('sel',id===lesson.id);
-    item.textContent=(saved.passed[id+'@guide']||saved.passed[id+'@exam']?'✓  ':'')+item.dataset.title;
+    item.textContent=(passedLesson(id)?'✓  ':'')+item.dataset.title;
   });
-  const count=lessons.filter(l=>saved.passed[l.id+'@guide']||saved.passed[l.id+'@exam']).length;
+  const count=lessons.filter(l=>passedLesson(l.id)).length;
   $('count').textContent=count+' / '+lessons.length;$('overall').max=lessons.length;$('overall').value=count;
 }
 function status(message){const ids=Object.keys(lesson.answers);$('status').textContent=message||ids.filter(r=>String(data[r]??'').startsWith('=')).length+' dari '+ids.length+' sel latihan berisi rumus';}
@@ -126,6 +133,10 @@ function coach(){
     else if(lesson.plot.kind==='iter')hint='Perhatikan indeks k. '+lesson.concept;
     else if(lesson.plot.kind==='area'&&col==='B'&&r>=2&&r<=8&&lesson.id!=='mixed')hint='Kuadratkan x dengan ^2. Kalikan hasilnya dengan logaritma natural 2x menggunakan LN.';
     add('p',hint);
+    if(feedback[addr]==='bad'&&data[addr]){
+      const expected=GridMath.sheet({...data,...lesson.answers})(addr);
+      add('p','Sel ini menghasilkan '+format(read(addr))+'. Dengan data saat ini, hasil acuannya '+format(expected)+'. Bandingkan alamat sel dan urutan operasi.');
+    }
     const details=document.createElement('details'),s=document.createElement('summary');s.textContent='Lihat contoh rumus';const c=document.createElement('code');c.textContent=lesson.answers[addr];details.append(s,c);el.append(details);
   }
   const next=document.createElement('button');next.className='btn';next.textContent='Sel latihan berikutnya';next.onclick=()=>{const refs=Object.keys(lesson.answers);select(refs[(refs.indexOf(addr)+1)%refs.length]);$('grid').querySelector('.selected')?.scrollIntoView({block:'nearest',inline:'nearest'});};el.append(next);
@@ -169,16 +180,19 @@ $('check').onclick=()=>{
   commit();const expected=GridMath.sheet({...data,...lesson.answers}),refs=Object.keys(lesson.answers);let ok=0;const wrong=[];
   for(const r of refs){const a=read(r),b=expected(r);const pass=String(data[r]??'').startsWith('=')&&typeof a==='number'&&typeof b==='number'&&Math.abs(a-b)<=1e-7*Math.max(1,Math.abs(b));feedback[r]=pass?'good':'bad';if(pass)ok++;else wrong.push(r);}
   if(!wrong.length)saved.passed[keyFor()]=true;else delete saved.passed[keyFor()];
-  persist();updateNav();if(wrong.length)addr=wrong[0];render();status(wrong.length?ok+' / '+refs.length+' benar. Periksa '+addr+' dan rumus yang dirujuk.':'Selesai. Semua '+ok+' rumus menghasilkan nilai yang sesuai.');
+  persist();updateNav();if(wrong.length)addr=wrong[0];render();status(wrong.length?ok+' / '+refs.length+' benar. '+(data[addr]?'Cek referensi dan operasi pada ':'Mulai dengan rumus di ')+addr+'.':'Selesai. Semua '+ok+' rumus benar. Pilih paket lain untuk mencoba angka baru.');
 };
 function modal(title){$('dialogTitle').textContent=title;$('dialogBody').replaceChildren();$('dialog').showModal();return $('dialogBody');}
 $('close').onclick=()=>$('dialog').close();
 $('search').onclick=()=>{const body=modal('Cari latihan'),input=document.createElement('input'),list=document.createElement('div');input.placeholder='Nama metode atau minggu';input.setAttribute('aria-label','Cari metode');body.append(input,list);
-  const find=()=>{list.replaceChildren();const hit=lessons.filter(l=>(l.title+' '+l.group+' Week '+l.week).toLowerCase().includes(input.value.toLowerCase()));for(const l of hit){const b=document.createElement('button');b.className='result';b.textContent=l.title+' · Week '+l.week;b.onclick=()=>selectLesson(l);list.append(b);}if(!hit.length)list.textContent='Latihan tidak ditemukan.';};input.oninput=find;find();input.focus();};
+  const find=()=>{list.replaceChildren();const hit=lessons.filter(l=>(termOf(l)+' '+l.title+' '+l.group+' Week '+l.week).toLowerCase().includes(input.value.toLowerCase()));for(const l of hit){const b=document.createElement('button');b.className='result';b.textContent=l.title+' · '+termOf(l)+' · Week '+l.week;b.onclick=()=>selectLesson(l);list.append(b);}if(!hit.length)list.textContent='Latihan tidak ditemukan.';};input.oninput=find;find();input.focus();};
 $('help').onclick=()=>{modal('Mengetik di lembar Excel').innerHTML='<p>Pilih sel ungu, ketik <code>=B3-B2</code>, lalu tekan Enter. Klik dua kali atau tekan F2 untuk menyunting rumus lama. Angka memakai titik desimal.</p><p>Tab dan tombol panah memindahkan pilihan. Ctrl+C dan Ctrl+V menyalin sel. Saat ditempel, referensi relatif bergeser. <code>$B$8</code> mengunci kolom dan baris.</p><p><b>Isi ke bawah</b> menyalin rumus aktif ke sel latihan berurutan di bawahnya. Ctrl+D menyalin dari satu sel di atas. Tempel blok dari Excel memakai Ctrl+V.</p><p>Gunakan operator + − * / ^, perbandingan, SUM, PRODUCT, IF, ABS, ROUND, MIN, MAX, SIN, COS, SQRT, EXP dan LN. Rentang seperti <code>SUM(B2:B6)</code> didukung. Pisahkan argumen dengan koma atau titik koma.</p><p><b>Ekspor Excel</b> menyimpan sel dan rumus saat ini. Di Excel, tab Latihan berisi lembar kerja dan tab Soal berisi instruksi.</p>';};
 $('reset').onclick=()=>{const b=modal('Ulangi latihan ini?');b.innerHTML='<p>Jawaban pada metode dan mode aktif akan dikosongkan.</p><button class="primary">Ulangi latihan</button>';b.querySelector('button').onclick=()=>{saved.works[keyFor()]={};delete saved.passed[keyFor()];$('dialog').close();init();};};
 $('export').onclick=()=>{commit();const blob=ExcelFile.build(lesson,data,mode==='guide'),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='Numerika - '+lesson.title.replace(/[\\/]/g,'-')+'.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);};
 for(const m of ['guide','exam'])$(m).onclick=()=>{if(mode!==m){commit();mode=m;init();}};
+for(const b of $('stages').children)b.onclick=()=>goStage(b.dataset.stage);
+$('setChoice').onchange=e=>{commit();setIndex=Number(e.target.value);saved.sets[original.id]=setIndex;lesson=practiceSet(original,setIndex);exampleStep=0;inspectRow=lesson.plot.from;init();};
+$('inspect').oninput=e=>{inspectRow=Number(e.target.value);drawChart();};
 for(const t of ['steps','concept'])$(t).onclick=()=>{if(tab!==t){tab=t;coach();reveal($('coachBody'));}};
 $('openNav').onclick=()=>drawer(true);$('closeNav').onclick=$('navShade').onclick=()=>drawer(false);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('dialog').open&&$('sidebar').classList.contains('open'))drawer(false);});
@@ -187,12 +201,24 @@ document.addEventListener('keydown',e=>{if(e.key==='/'&&!$('dialog').open&&docum
 function drawChart(){
   const cv=$('chart'),ctx=cv.getContext('2d'),w=cv.clientWidth,h=cv.clientHeight;if(!w||!h||!ctx)return;
   const dpr=window.devicePixelRatio||1;cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);ctx.scale(dpr,dpr);
-  const p=lesson.plot,points=c=>{const a=[];for(let i=p.from;i<=p.to;i++){const x=read(p.x+i),y=read(c+i);if(Number.isFinite(x)&&Number.isFinite(y))a.push([x,y]);}return a;};
-  const a=points(p.y),b=p.y2?points(p.y2):[];plotPoints=a;
-  $('chartName').textContent=p.kind==='iter'?'Riwayat iterasi':p.kind==='area'?'Luas di bawah kurva':'Kurva data';
-  $('legend').textContent=p.kind==='iter'?(p.y2?'x · y':'Taksiran'):'f(x)';
+  const p=lesson.plot,demo=stage!=='practice',value=demo?GridMath.sheet({...lesson.base,...lesson.answers}):read;
+  const points=c=>{const a=[];for(let i=p.from;i<=p.to;i++){const x=value(p.x+i),y=value(c+i);if(Number.isFinite(x)&&Number.isFinite(y))a.push([x,y]);}return a;};
+  const a=points(p.y),b=p.y2?points(p.y2):[],third=p.y3?points(p.y3):[];plotPoints=a;
+  const labels={measure:'Acuan dan hasil ukur',round:'Galat potong dan bulat',error:'Galat per langkah',tolerance:'Galat dan toleransi',contribution:'Sumbangan galat energi',area:'Luas di bawah kurva',iter:'Riwayat iterasi'};
+  $('chartName').textContent=(demo?'Contoh · ':'')+(labels[p.kind]||'Kurva data');
+  const seriesNames=[p.y,p.y2,p.y3].filter(Boolean).map(c=>lesson.base[c+'1']);
+  $('legend').textContent=seriesNames.join(' · ');
+  if(demo)$('inspectLabel').textContent='Baris '+inspectRow+' · '+seriesNames.map((name,i)=>name+' = '+format(value([p.y,p.y2,p.y3][i]+inspectRow))).join(' · ');
+  if(demo&&(lesson.group==='Akar persamaan'||lesson.id==='review5')){
+    drawRootExample(ctx,w,h,value);plotPoints=[];return;
+  }
+  if(p.kind==='contribution'){
+    const vals=[value('E2'),value('E3')],limit=Math.max(1,...vals.filter(Number.isFinite));
+    vals.forEach((v,i)=>{const y=20+44*i;ctx.font='12px Poppins';ctx.fillStyle='#efebff';ctx.fillText((i?'Tinggi':'Massa')+' · '+(Number.isFinite(v)?format(v)+' J':'isi E'+(i+2)),12,y);if(Number.isFinite(v)){ctx.fillStyle=i?'#76dccd':'#c6b4ff';ctx.fillRect(12,y+8,(w-30)*v/limit,10);}});
+    cv.setAttribute('aria-label','Sumbangan ketidakpastian energi, massa dan tinggi: '+vals.join(', ')+' joule');return;
+  }
   if(!a.length){ctx.fillStyle='#d2ceea';ctx.font='13px Poppins, sans-serif';ctx.fillText('Isi kolom '+p.y+' untuk menggambar grafik.',12,h/2);return;}
-  const xx=a.concat(b).map(t=>t[0]),yy=a.concat(b).map(t=>t[1]);let xmin=Math.min(...xx),xmax=Math.max(...xx),ymin=Math.min(...yy),ymax=Math.max(...yy);
+  const xx=a.concat(b,third).map(t=>t[0]),yy=a.concat(b,third).map(t=>t[1]);let xmin=Math.min(...xx),xmax=Math.max(...xx),ymin=Math.min(...yy),ymax=Math.max(...yy);
   if(p.kind==='area')ymin=Math.min(0,ymin);if(xmax===xmin)xmax=xmin+1;if(ymax===ymin)ymax=ymin+1;
   const l=36,r=w-15,t=12,bot=h-24,sx=x=>l+(x-xmin)*(r-l)/(xmax-xmin),sy=y=>bot-(y-ymin)*(bot-t)/(ymax-ymin);
   ctx.font='10px Poppins, sans-serif';ctx.lineWidth=1;ctx.fillStyle='#c5c4db';ctx.strokeStyle='#42435c';
@@ -215,8 +241,9 @@ function drawChart(){
     ctx.save();ctx.beginPath();ctx.rect(l,t,r-l,bot-t);ctx.clip();path(curve);ctx.strokeStyle='#c6b4ff';ctx.lineWidth=2;ctx.stroke();ctx.restore();
     a.forEach(point=>series([point],'#c6b4ff'));
   }else if(p.kind==='area')a.forEach(point=>series([point],'#c6b4ff'));else series(a,'#c6b4ff');
-  series(b,'#76dccd');
-  if(p.target){const x=read(p.target),y=read(p.result);
+  series(b,'#76dccd');series(third,'#f1b776');
+  if(demo){const xy=a[inspectRow-p.from];if(xy){ctx.beginPath();ctx.arc(sx(xy[0]),sy(xy[1]),6,0,Math.PI*2);ctx.strokeStyle='white';ctx.stroke();}}
+  if(p.target){const x=value(p.target),y=value(p.result);
     if(Number.isFinite(x)&&x>=xmin&&x<=xmax){ctx.strokeStyle='#76dccd';ctx.setLineDash([3,4]);ctx.beginPath();ctx.moveTo(sx(x),t);ctx.lineTo(sx(x),bot);ctx.stroke();ctx.setLineDash([]);
       if(p.kind==='inter'&&Number.isFinite(y)&&y>=ymin&&y<=ymax){ctx.fillStyle='#76dccd';ctx.beginPath();ctx.arc(sx(x),sy(y),5,0,2*Math.PI);ctx.fill();}
       if(p.kind==='deriv'&&Number.isFinite(y)&&a.length>1){const value=a.reduce((total,[xi,yi],i)=>total+yi*a.reduce((v,[xj],j)=>i===j?v:v*(x-xj)/(xi-xj),1),0);ctx.save();ctx.beginPath();ctx.rect(l,t,r-l,bot-t);ctx.clip();path([[xmin,value+y*(xmin-x)],[xmax,value+y*(xmax-x)]]);ctx.stroke();ctx.restore();}

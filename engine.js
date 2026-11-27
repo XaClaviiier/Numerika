@@ -4,6 +4,7 @@ const GridMath = (() => {
   const token = /\s*(\$?[A-H]\$?[1-9]\d*(?![A-Z0-9])|[A-Z][A-Z0-9.]*|(?:\d+(?:\.\d*)?|\.\d+)(?:E[+-]?\d+)?|<>|>=|<=|[=<>:+*/^(),;%-])/iy;
   const cell = /^\$?([A-H])\$?([1-9]\d*)$/i;
   const functions = {SUM:a=>a.reduce((s,v)=>s+v,0),ABS:a=>Math.abs(a[0]),SIN:a=>Math.sin(a[0]),COS:a=>Math.cos(a[0]),EXP:a=>Math.exp(a[0]),LN:a=>Math.log(a[0]),SQRT:a=>Math.sqrt(a[0]),MIN:a=>Math.min(...a),MAX:a=>Math.max(...a),PRODUCT:a=>a.reduce((s,v)=>s*v,1),ROUND:([x,n])=>Math.sign(x)*Math.round(Math.abs(x)*10**n)/10**n, IF:([p,a,b])=>p?a:b};
+  functions.TRUNC=([x,n=0])=>Math.trunc(x*10**n)/10**n;
   function sheet(data) {
     const cache = new Map(), trail = new Set();
     function read(ref) {
