@@ -1,0 +1,78 @@
+:root {
+  --ui-font: Poppins, "Segoe UI", sans-serif;
+  --ease-out: cubic-bezier(.23, 1, .32, 1);
+  --ease-drawer: cubic-bezier(.32, .72, 0, 1);
+  font-family: var(--ui-font);
+}
+table, td.label, .formula output { font-family: var(--ui-font); font-variant-numeric: tabular-nums; }
+.formula input { font-variant-numeric: tabular-nums; }
+.brand strong { font-weight: 700; }
+html, .gridScroll, #sidebar, dialog { scroll-behavior: smooth; }
+.gridScroll { scroll-padding: 34px 3px 3px; }
+.group .arr { transform: rotate(0); font-size: 19px; line-height: 1; }
+.group[aria-expanded="true"] .arr { transform: rotate(90deg); }
+.navPanel { display: grid; grid-template-rows: 0fr; }
+.navPanel.expanded { grid-template-rows: 1fr; }
+.navClip { overflow: hidden; min-height: 0; }
+.navPanel .subnav { opacity: 0; transform: translateY(-4px); }
+.navPanel.expanded .subnav { opacity: 1; transform: none; }
+.modes, .tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); position: relative; isolation: isolate; }
+.modes::before, .tabs::before {
+  content: ""; position: absolute; inset: 3px auto 3px 3px; width: calc(50% - 3px);
+  background: white; box-shadow: 0 1px 4px #20223a28; border-radius: 5px; z-index: -1;
+}
+.modes:has(#exam.active)::before, .tabs:has(#concept.active)::before { transform: translateX(100%); }
+.modes button.active, .tabs button.active { background: transparent; box-shadow: none; }
+.formula:focus-within { box-shadow: inset 0 -2px #8a73cc; }
+#navShade { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .group .arr, .modes::before, .tabs::before { transition: transform 200ms var(--ease-out); }
+  .navPanel { transition: grid-template-rows 200ms var(--ease-out); }
+  .navPanel .subnav { transition: opacity 160ms, transform 200ms var(--ease-out); }
+  .btn, .primary, .help, .search, .lesson, .group, .result, .sheetFoot button {
+    transition: background-color 140ms, color 140ms, transform 120ms var(--ease-out), box-shadow 140ms;
+  }
+  .btn:active, .primary:active, .search:active, .sheetFoot button:active { transform: scale(.98); }
+  .formula { transition: box-shadow 140ms; }
+  dialog {
+    opacity: 0; transform: translateY(6px) scale(.98);
+    transition: opacity 180ms, transform 200ms var(--ease-out), overlay 200ms allow-discrete, display 200ms allow-discrete;
+  }
+  dialog[open] { opacity: 1; transform: none; }
+  dialog::backdrop { opacity: 0; transition: opacity 180ms, overlay 200ms allow-discrete, display 200ms allow-discrete; }
+  dialog[open]::backdrop { opacity: 1; }
+  @starting-style {
+    dialog[open] { opacity: 0; transform: translateY(6px) scale(.98); }
+    dialog[open]::backdrop { opacity: 0; }
+  }
+  .coach details[open] code { display: block; animation: hint-in 160ms var(--ease-out); }
+  @keyframes hint-in { from { opacity: 0; transform: translateY(-3px); } }
+}
+@media (hover: hover) and (pointer: fine) {
+  .group:hover, .lesson:not(.sel):hover, .help:hover, .search:hover { background-color: #f0eef8; }
+  .primary:hover, .btn:hover { box-shadow: 0 2px 6px #51467d26; }
+}
+@media (max-width: 840px) {
+  #sidebar, #sidebar.open {
+    display: flex; position: fixed; inset: 0 auto 0 0; width: min(265px, 88vw);
+    z-index: 10; box-shadow: none;
+  }
+  #sidebar { transform: translateX(-100%); visibility: hidden; }
+  #sidebar.open { transform: translateX(0); visibility: visible; }
+  #navShade { display: block; position: fixed; inset: 0; z-index: 9; background: #19182766; opacity: 0; visibility: hidden; }
+  #sidebar.open ~ #navShade { opacity: 1; visibility: visible; }
+  @media (prefers-reduced-motion: no-preference) {
+    #sidebar { transition: transform 240ms var(--ease-drawer), visibility 0s 240ms; }
+    #navShade { transition: opacity 200ms, visibility 0s 240ms; }
+    #sidebar.open, #sidebar.open ~ #navShade { transition-delay: 0s; }
+  }
+}
+@media (max-width: 650px) {
+  .overview, .workBody { grid-template-columns: minmax(0, 1fr); }
+  .heading, .workHead, .checkBar, .crumb { flex-wrap: wrap; }
+  .heading > div, .assignment { min-width: 0; overflow-wrap: anywhere; }
+  header { min-height: 60px; height: auto; flex-wrap: wrap; gap: 4px 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html, .gridScroll, #sidebar, dialog { scroll-behavior: auto; }
+}
